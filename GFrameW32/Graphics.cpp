@@ -443,27 +443,29 @@ void Lab1(int width, int height) {
     FloodFill4(x_triangle_pos + 10, y_triangle_pos + 10, width, height, RGBPIXEL::Yellow(), RGBPIXEL::Black());
 
     int rndp_size = 300;
-    // std::vector<iPoint> random_polygon = GenerartePoligon(10, rndp_size, RGBPIXEL::Yellow());
-    std::vector<iPoint> random_polygon = {
-        iPoint(30,0),
-        iPoint(50,60),
-        iPoint(0,20),
-        iPoint(60,20),
-        iPoint(10,60)
-    };
+    std::vector<iPoint> random_polygon = GenerartePoligon(10, rndp_size, RGBPIXEL::Yellow());
     int x_rnd_pos = 400, y_rnd_pos = 100;
-    ZoomObject(random_polygon, 4.5);
     MoveObject(random_polygon, x_rnd_pos, y_rnd_pos);
     PrintIsConvex(random_polygon, x_rnd_pos, y_rnd_pos);
     MatchPoints(random_polygon, RGBPIXEL::Red());
     ColorPoligon(random_polygon, RGBPIXEL::White(), true);
     gfDrawText(x_rnd_pos, y_rnd_pos, "EO mode", RGBPIXEL::Red());
 
-
     MoveObject(random_polygon, 300, 0);
     MatchPoints(random_polygon, RGBPIXEL::Red());
     ColorPoligon(random_polygon, RGBPIXEL::White(), false);
     gfDrawText(x_rnd_pos + 300, y_rnd_pos, "NZW mode", RGBPIXEL::Red());
+
+    std::vector<iPoint> star2 = STAR2;
+    int x_star2_pos = 400, y_star2_pos = 400;
+    ZoomObject(star2, 4.5);
+    MoveObject(star2, x_star2_pos, y_star2_pos);
+    MatchPoints(star2, RGBPIXEL::Red());
+    ColorPoligon(star2, RGBPIXEL::White(), true);
+
+    MoveObject(star2, 300, 0);
+    MatchPoints(star2, RGBPIXEL::Red());
+    ColorPoligon(star2, RGBPIXEL::White(), false);
 
 }
 
