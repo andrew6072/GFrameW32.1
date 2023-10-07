@@ -233,6 +233,107 @@ void FloodFill4(int x, int y, int width, int height, RGBPIXEL newColor, RGBPIXEL
     }
 }
 
+bool IsPointInPoligon(std::vector<iPoint> points, iPoint dot, bool flag) { // flag: EO/NZW mode
+    if (flag == true) {
+        // Переменная для хранения количества точек
+        int n = points.size();
+        // Переменная для хранения количества пересечений
+        int count = 0;
+        // Перебираем точки
+        for (int i = 0; i < n; i++)
+        {
+            // Если отрезки пересекаются
+            iPoint dot1 = points[i];
+            iPoint dot2 = points[(i + 1) % n];
+            if (dot1.y == dot2.y)
+                continue;
+            if (dot.y < min(dot1.y, dot2.y))
+                continue;
+            if (dot.y >= max(dot1.y, dot2.y))
+                continue;
+            double x = dot1.x + (dot.y - dot1.y) * (dot2.x - dot1.x) / (dot2.y - dot1.y);
+            if (x > dot.x)
+                count++;
+        }
+        // Если количество пересечений нечетное, то точка внутри многоугольника
+        if (count % 2 == 1)
+        {
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+    else {
+        // Ввести новую переменную, которая хранит самую дальнюю координату по оси х 
+        int maxX = std::max_element(points.begin(), points.end(), [](iPoint a, iPoint b) { return a.x < b.x; })->x;
+
+        // Перебрать все стороны многоульника
+        // Узнаю пересеклась ли сторона многоугольника с лучом от точки dot до точки с самой дальней координатой по оси х
+        // Если пересеклась, то узнаем направление обхода стороны многоугольника
+        // Сравниваем координаты точек, которые лежат на стороне многоугольника и на луче
+        // Если координата по y первой точки на стороне мноугольника больше чем координата по y второй точки на стороне многоугольника, то обход стороны многоугольника по часовой стрелке
+        // Давляем в счетчик +1
+        // Если нет, то -1
+        // Если счетчик больше 0, то точка внутри многоугольника
+        // Если счетчик меньше 0, то точка вне многоугольника
+
+        // Переменная для хранения количества точек
+        int n = points.size();
+        // Переменная для хранения количества пересечений
+        int count = 0;
+        // Перебираем точки
+        for (int i = 0; i < n; i++)
+        {
+            // Если отрезки пересекаются
+            iPoint dot1 = points[i];
+            iPoint dot2 = points[(i + 1) % n];
+            if (dot1.y == dot2.y)
+                continue;
+            if (dot.y < min(dot1.y, dot2.y))
+                continue;
+            if (dot.y >= max(dot1.y, dot2.y))
+                continue;
+            double x = dot1.x + (dot.y - dot1.y) * (dot2.x - dot1.x) / (dot2.y - dot1.y);
+            if (x > dot.x && dot1.y > dot2.y)
+                count--;
+            if (x > dot.x && dot1.y < dot2.y)
+                count++;
+        }
+        if (count > 0) {
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+}
+
+void ColorPoligon(std::vector<iPoint> points, RGBPIXEL color, bool flag)
+{
+    // Определить максимальные и минимальные значения x и y в points, используя stl
+
+    int minX = std::min_element(points.begin(), points.end(), [](iPoint a, iPoint b) { return a.x < b.x; })->x;
+    int maxX = std::max_element(points.begin(), points.end(), [](iPoint a, iPoint b) { return a.x < b.x; })->x;
+    int minY = std::min_element(points.begin(), points.end(), [](iPoint a, iPoint b) { return a.y < b.y; })->y;
+    int maxY = std::max_element(points.begin(), points.end(), [](iPoint a, iPoint b) { return a.y < b.y; })->y;
+
+    // Перебираем все точки внутри прямоугольника
+    for (int x = minX; x <= maxX; x++)
+    {
+        for (int y = minY; y <= maxY; y++)
+        {
+            // Если точка внутри многоугольника
+            if (IsPointInPoligon(points, iPoint(x, y), flag))
+            {
+                // Закрашиваем точку
+                gfSetPixel(x, y, color);
+            }
+        }
+    }
+}
+
 const std::vector<iPoint> TRIANGLE = { iPoint(0, 0), iPoint(120, 0), iPoint(60, 100) };
 const std::vector<iPoint> STAR = { iPoint(0, 30), iPoint(30, 30), iPoint(40, 0), iPoint(50, 30), iPoint(80, 30),
                                   iPoint(50, 45), iPoint(60, 80), iPoint(40, 55), iPoint(20, 80), iPoint(30, 45) };
@@ -272,18 +373,27 @@ void Lab1(int width, int height) {
     MatchPoints(triangle, RGBPIXEL::Yellow());
     FloodFill4(x_triangle_pos + 10, y_triangle_pos + 10, width, height, RGBPIXEL::Yellow(), RGBPIXEL::Black());
 
-    int rndp_size = 110;
+    int rndp_size = 300;
     std::vector<iPoint> random_polygon = GenerartePoligon(10, rndp_size, RGBPIXEL::Yellow());
     int x_rnd_pos = 400, y_rnd_pos = 100;
     MoveObject(random_polygon, x_rnd_pos, y_rnd_pos);
     PrintIsConvex(random_polygon, x_rnd_pos, y_rnd_pos);
     MatchPoints(random_polygon, RGBPIXEL::Yellow());
+    ColorPoligon(random_polygon, RGBPIXEL::White(), true);
+    gfDrawText(x_rnd_pos, y_rnd_pos, "EO mode", RGBPIXEL::Red());
+
+
+    MoveObject(random_polygon, 300, 0);
+    MatchPoints(random_polygon, RGBPIXEL::Yellow());
+    ColorPoligon(random_polygon, RGBPIXEL::White(), false);
+    gfDrawText(x_rnd_pos + 300, y_rnd_pos, "NZW mode", RGBPIXEL::Red());
+
 }
 
 bool gfInitScene()
 {
-    int width = 640;
-    int height = 480;
+    int width = 2*640;
+    int height = 2*480;
 
     gfSetWindowSize(width, height);
 
@@ -298,12 +408,6 @@ bool gfInitScene()
     //gfDisplayMessage("Message!");
 
     Lab1(width, height);
-
-    bool star_simple = IsSimplePoligon(STAR);
-    bool square_simple = IsSimplePoligon(SQUARE);
-    bool obj1_simple = IsSimplePoligon(OBJECT1);
-    bool triangle_simple = IsSimplePoligon(TRIANGLE);
-
     return true;
 }
 
