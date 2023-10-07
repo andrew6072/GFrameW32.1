@@ -1,4 +1,4 @@
-#include "StdAfx.h"
+ï»¿#include "StdAfx.h"
 #include "GF.h"
 #include <vector>
 #include <stack>
@@ -241,83 +241,144 @@ void FloodFill4(int x, int y, int width, int height, RGBPIXEL newColor, RGBPIXEL
     }
 }
 
-bool IsPointInPoligon(std::vector<iPoint> points, iPoint dot, bool flag) { // flag: EO/NZW mode
-    if (flag == true) {
-        int n = points.size();
-        int count = 0; // number of intersects
-        for (int i = 0; i < n; i++)
-        {
-            // if 2 segments intersected
-            iPoint dot1 = points[i];
-            iPoint dot2 = points[(i + 1) % n];
-            if (dot1.y == dot2.y)
-                continue;
-            if (dot.y < min(dot1.y, dot2.y))
-                continue;
-            if (dot.y >= max(dot1.y, dot2.y))
-                continue;
-            double x = dot1.x + (dot.y - dot1.y) * (dot2.x - dot1.x) / (dot2.y - dot1.y);
-            if (x > dot.x)
-                count++;
-        }
-        // EO mode, if count odd then point is in polygon
-        if (count % 2 == 1)
-        {
-            return true;
-        }
+enum CLPointType {
+    LEFT,
+    RIGHT,
+    BEYOND,
+    BEHIND,
+    BETWEEN,
+    ORIGIN,
+    DESTINATION
+};
+
+CLPointType Classify(iPoint p1, iPoint p2, iPoint p) {
+    int ax = p2.x - p1.x;  // ð‘Ž
+    int ay = p2.y - p1.y;
+    int bx = p.x - p1.x;  // ð‘
+    int by = p.y - p1.y;
+    int s = ax * by - bx * ay;
+    if (s > 0) return LEFT;
+    if (s < 0) return RIGHT;
+    if ((ax * bx < 0) || (ay * by < 0))  // Ð¿Ñ€Ð¾Ñ‚Ð¸Ð²Ð¾Ð¿Ð¾Ð»Ð¾Ð¶Ð½Ð¾ Ð½Ð°Ð¿Ñ€Ð°Ð²Ð»ÐµÐ½Ð¸ÑŽ
+        return BEHIND;                   // Ð¿Ð¾Ð·Ð°Ð´Ð¸
+    if ((ax * ax + ay * ay) < (bx * bx + by * by))
+        return BEYOND;               // Ð²Ð¿ÐµÑ€ÐµÐ´Ð¸
+    if (p1.x == p.x && p1.y == p.y)  // ÑÐ¾Ð²Ð¿Ð°Ð´Ð°ÐµÑ‚ Ñ Ð½Ð°Ñ‡Ð°Ð»Ð¾Ð¼
+        return ORIGIN;
+    if (p2.x == p.x && p2.y == p.y)  // ÑÐ¾Ð²Ð¿Ð°Ð´Ð°ÐµÑ‚ Ñ ÐºÐ¾Ð½Ñ†Ð¾Ð¼
+        return DESTINATION;
+    return BETWEEN;  // Ð¼ÐµÐ¶Ð´Ñƒ
+}
+
+enum IntersectType {
+    SAME,
+    PARALLEL,
+    SKEW,
+    SKEW_CROSS,
+    SKEW_NO_CROSS
+};
+
+IntersectType Intersect(iPoint a, iPoint b, iPoint c, iPoint d, double* t) {  // cd is line, ab is segment
+    double nx = d.y - c.y;                                                    // Ð²Ñ‹Ñ‡Ð¸ÑÐ»ÐµÐ½Ð¸Ðµ ÐºÐ¾Ð¾Ñ€Ð´Ð¸Ð½Ð°Ñ‚ ð‘›
+    double ny = c.x - d.x;
+    CLPointType type;
+    double denom = nx * (b.x - a.x) + ny * (b.y - a.y);  // ð‘› âˆ— ð‘ âˆ’ ð‘Ž
+    if (denom == 0) {                                    // Ð¿Ð°Ñ€Ð°Ð»Ð»ÐµÐ»ÑŒÐ½Ñ‹ Ð¸Ð»Ð¸ ÑÐ¾Ð²Ð¿Ð°Ð´Ð°ÑŽÑ‚
+        type = Classify(c, d, a);                        // Ð¿Ð¾Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ Ñ‚Ð¾Ñ‡ÐºÐ¸ ð‘Ž Ð¾Ñ‚Ð½Ð¾ÑÐ¸Ñ‚ÐµÐ»ÑŒÐ½Ð¾ Ð¿Ñ€ÑÐ¼Ð¾Ð¹ ð‘ð‘‘
+        if (type == LEFT || type == RIGHT)
+            return PARALLEL;
         else
-        {
-            return false;
+            return SAME;
+    }
+    double num = nx * (a.x - c.x) + ny * (a.y - c.y);  // ð‘› âˆ— ð‘Ž âˆ’ ð‘
+    *t = -num / denom;                                 // Ð¿Ð¾ Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸ÑŽ t Ð¼Ð¾Ð¶Ð½Ð¾ ÑÐ´ÐµÐ»Ð°Ñ‚ÑŒ Ð²Ñ‹Ð²Ð¾Ð´ Ð¾ Ð¿ÐµÑ€ÐµÑÐµÑ‡ÐµÐ½Ð¸Ð¸ Ð¾Ñ‚Ñ€ÐµÐ·ÐºÐ° ð‘Žð‘
+    return SKEW;
+}
+
+IntersectType Cross(iPoint a, iPoint b, iPoint c, iPoint d, double* tab, double* tcd) {
+    IntersectType type = Intersect(a, b, c, d, tab);
+    if (type == SAME || type == PARALLEL)
+        return type;
+    if ((*tab < 0) || (*tab > 1))
+        return SKEW_NO_CROSS;
+    Intersect(c, d, a, b, tcd);
+    if ((*tcd < 0) || (*tcd > 1))
+        return SKEW_NO_CROSS;
+    return SKEW_CROSS;
+}
+
+enum EType {
+    TOUCHING,
+    CROSS_LEFT,
+    CROSS_RIGHT,
+    INESSENTIAL
+};
+
+EType EdgeType(iPoint o, iPoint d, iPoint a) {
+    switch (Classify(o, d, a)) {
+    case LEFT:
+        if (a.y > o.y && a.y <= d.y)
+            return CROSS_LEFT;  // Ð¿ÐµÑ€ÐµÑÐµÐºÐ°ÑŽÑ‰Ð°Ñ, A ÑÐ»ÐµÐ²Ð°
+        else
+            return INESSENTIAL;  // Ð±ÐµÐ·Ñ€Ð°Ð·Ð»Ð¸Ñ‡Ð½Ð°Ñ
+    case RIGHT:
+        if (a.y > d.y && a.y <= o.y)
+            return CROSS_RIGHT;  // Ð¿ÐµÑ€ÐµÑÐµÐºÐ°ÑŽÑ‰Ð°Ñ, A ÑÐ¿Ñ€Ð°Ð²Ð°
+        else
+            return INESSENTIAL;  // Ð±ÐµÐ·Ñ€Ð°Ð·Ð»Ð¸Ñ‡Ð½Ð°Ñ
+    case BETWEEN:
+    case ORIGIN:
+    case DESTINATION:
+        return TOUCHING;  // ÐºÐ°ÑÐ°ÑŽÑ‰Ð°ÑÑÑ
+    default:
+        return INESSENTIAL;  // Ð±ÐµÐ·Ñ€Ð°Ð·Ð»Ð¸Ñ‡Ð½Ð°Ñ
+    }
+}
+
+bool PInPolygonEOMode(iPoint p, std::vector<iPoint> points) {
+    int param = 0;
+    int n = points.size();
+    for (int i = 0; i < n; i++) {
+        switch (EdgeType(points[i], points[(i + 1) % n], p)) {
+        case TOUCHING:  // ÐµÑÐ»Ð¸ Ð»ÐµÐ¶Ð¸Ñ‚ Ð½Ð° Ð¿Ð¾Ð»Ð¸Ð³Ð¾Ð½Ðµ, Ñ‚Ð¾ Ð·Ð°Ð²ÐµÐ´Ð¾Ð¼Ð¾ Ð¿Ñ€Ð¸Ð½Ð°Ð´Ð»ÐµÐ¶Ð¸Ñ‚
+            return true;
+        case CROSS_LEFT:
+        case CROSS_RIGHT:
+            param = 1 - param;  // Ð¸Ð·Ð¼ÐµÐ½ÑÐµÐ¼ Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸Ðµ Ñ‡ÐµÑ‚Ð½Ð¾ÑÑ‚Ð¸
+            break;
         }
     }
-    else {
-        int maxX = std::max_element(points.begin(), points.end(), [](iPoint a, iPoint b) { return a.x < b.x; })->x;
+    if (param == 1)
+        return true;
+    // Ð½ÐµÑ‡ÐµÑ‚Ð½Ð¾Ðµ
+    return false;
+}
 
-        // Enumerate all sides of the polygon.
-        // 
-        // Find out whether the side of the polygon intersected with the ray from the point dot 
-        // to the point with the farthest coordinate along the x axis.
-        // 
-        // If it intersects, then we find out the direction of traversing the side of the polygon.
-        // 
-        // Compare the coordinates of points that lie on the side of the polygon and on the ray.
-        // 
-        // If the y coordinate of the first point on the side of the polygon is greater than the 
-        // y coordinate of the second point on the side of the polygon, then traverse the side of 
-        // the polygon clockwise and count++ else count--
-        // 
-        // If the counter is greater than 0, then the point is inside the polygon
-        // 
-        // If the counter is less than 0, then the point is outside the polygon
-
-        // number of points
-        int n = points.size();
-        // number of intersects
-        int count = 0;
-        // enumerate all points
-        for (int i = 0; i < n; i++)
-        {
-            // if 2 segments itersected
-            iPoint dot1 = points[i];
-            iPoint dot2 = points[(i + 1) % n];
-            if (dot1.y == dot2.y)
-                continue;
-            if (dot.y < min(dot1.y, dot2.y))
-                continue;
-            if (dot.y >= max(dot1.y, dot2.y))
-                continue;
-            double x = dot1.x + (dot.y - dot1.y) * (dot2.x - dot1.x) / (dot2.y - dot1.y);
-            if (x > dot.x && dot1.y > dot2.y)
-                count--;
-            if (x > dot.x && dot1.y < dot2.y)
-                count++;
-        }
-        if (count > 0) {
+bool PInPolygonNZWMode(iPoint p, std::vector<iPoint> points) {
+    int winding = 0;
+    int n = points.size();
+    for (int i = 0; i < n; i++) {
+        switch (EdgeType(points[i], points[(i + 1) % n], p)) {
+        case TOUCHING:  // ÐµÑÐ»Ð¸ Ð»ÐµÐ¶Ð¸Ñ‚ Ð½Ð° Ð¿Ð¾Ð»Ð¸Ð³Ð¾Ð½Ðµ, Ñ‚Ð¾ Ð·Ð°Ð²ÐµÐ´Ð¾Ð¼Ð¾ Ð¿Ñ€Ð¸Ð½Ð°Ð´Ð»ÐµÐ¶Ð¸Ñ‚
             return true;
+        case CROSS_LEFT:
+            winding--;
+            break;
+        case CROSS_RIGHT:
+            winding++;
+            break;
         }
-        else {
-            return false;
-        }
+    }
+    if (winding != 0) return true;
+    return false;
+}
+
+bool IsPointInPoligon(iPoint point, std::vector<iPoint> points, bool flag) { // flag: EO/NZW mode
+    if (flag == true) {
+        return PInPolygonEOMode(point, points);
+    }
+    else {
+        return PInPolygonNZWMode(point, points);
     }
 }
 
@@ -333,7 +394,7 @@ void ColorPoligon(std::vector<iPoint> points, RGBPIXEL color, bool flag)
     {
         for (int y = minY; y <= maxY; y++)
         {
-            if (IsPointInPoligon(points, iPoint(x, y), flag))
+            if (IsPointInPoligon(iPoint(x, y), points, flag))
             {
                 gfSetPixel(x, y, color);
             }
@@ -427,8 +488,8 @@ bool gfInitScene()
     return true;
 }
 
-// Âûçûâàåòñÿ â öèêëå äî ìîìåíòà âûõîäà èç ïðèëîæåíèÿ.
-// Ñëåäóåò èñïîëüçîâàòü äëÿ ñîçäàíèÿ àíèìàöèîííûõ ýôôåêòîâ
+// Ð’Ñ‹Ð·Ñ‹Ð²Ð°ÐµÑ‚ÑÑ Ð² Ñ†Ð¸ÐºÐ»Ðµ Ð´Ð¾ Ð¼Ð¾Ð¼ÐµÐ½Ñ‚Ð° Ð²Ñ‹Ñ…Ð¾Ð´Ð° Ð¸Ð· Ð¿Ñ€Ð¸Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ.
+// Ð¡Ð»ÐµÐ´ÑƒÐµÑ‚ Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÑŒ Ð´Ð»Ñ ÑÐ¾Ð·Ð´Ð°Ð½Ð¸Ñ Ð°Ð½Ð¸Ð¼Ð°Ñ†Ð¸Ð¾Ð½Ð½Ñ‹Ñ… ÑÑ„Ñ„ÐµÐºÑ‚Ð¾Ð²
 void gfDrawScene()
 {
     //gfClearScreen(RGBPIXEL::Black());
@@ -442,27 +503,27 @@ void gfDrawScene()
     //gfDrawRectangle(x - 10, y - 10, x + 10, y + 10, RGBPIXEL::Green());
 }
 
-// Âûçûâàåòñÿ îäèí ðàç ïåðåä âûõîäîì èç ïðèëîæåíèÿ.
-// Ñëåäóåò èñïîëüçîâàòü äëÿ îñâîáîæäåíèÿ âûäåëåííûõ
-// ðåñóðñîâ (ïàìÿòè, ôàéëîâ è ò.ï.)
+// Ð’Ñ‹Ð·Ñ‹Ð²Ð°ÐµÑ‚ÑÑ Ð¾Ð´Ð¸Ð½ Ñ€Ð°Ð· Ð¿ÐµÑ€ÐµÐ´ Ð²Ñ‹Ñ…Ð¾Ð´Ð¾Ð¼ Ð¸Ð· Ð¿Ñ€Ð¸Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ.
+// Ð¡Ð»ÐµÐ´ÑƒÐµÑ‚ Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÑŒ Ð´Ð»Ñ Ð¾ÑÐ²Ð¾Ð±Ð¾Ð¶Ð´ÐµÐ½Ð¸Ñ Ð²Ñ‹Ð´ÐµÐ»ÐµÐ½Ð½Ñ‹Ñ…
+// Ñ€ÐµÑÑƒÑ€ÑÐ¾Ð² (Ð¿Ð°Ð¼ÑÑ‚Ð¸, Ñ„Ð°Ð¹Ð»Ð¾Ð² Ð¸ Ñ‚.Ð¿.)
 void gfCleanupScene()
 {
 }
 
-// Âûçûâàåòñÿ êîãäà ïîëüçîâàòåëü íàæèìàåò ëåâóþ êíîïêó ìûøè
+// Ð’Ñ‹Ð·Ñ‹Ð²Ð°ÐµÑ‚ÑÑ ÐºÐ¾Ð³Ð´Ð° Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒ Ð½Ð°Ð¶Ð¸Ð¼Ð°ÐµÑ‚ Ð»ÐµÐ²ÑƒÑŽ ÐºÐ½Ð¾Ð¿ÐºÑƒ Ð¼Ñ‹ÑˆÐ¸
 void gfOnLMouseClick( int x, int y )
 {
     x; y;
     gfDrawRectangle(x - 10, y - 10, x + 10, y + 10, RGBPIXEL::Green());
 }
 
-// Âûçûâàåòñÿ êîãäà ïîëüçîâàòåëü íàæèìàåò ïðàâóþ êíîïêó ìûøè
+// Ð’Ñ‹Ð·Ñ‹Ð²Ð°ÐµÑ‚ÑÑ ÐºÐ¾Ð³Ð´Ð° Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒ Ð½Ð°Ð¶Ð¸Ð¼Ð°ÐµÑ‚ Ð¿Ñ€Ð°Ð²ÑƒÑŽ ÐºÐ½Ð¾Ð¿ÐºÑƒ Ð¼Ñ‹ÑˆÐ¸
 void gfOnRMouseClick( int x, int y )
 {
     x; y;
 }
 
-// Âûçûâàåòñÿ êîãäà ïîëüçîâàòåëü íàæèìàåò êëàâèøó íà êëàâèàòóðå
+// Ð’Ñ‹Ð·Ñ‹Ð²Ð°ÐµÑ‚ÑÑ ÐºÐ¾Ð³Ð´Ð° Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒ Ð½Ð°Ð¶Ð¸Ð¼Ð°ÐµÑ‚ ÐºÐ»Ð°Ð²Ð¸ÑˆÑƒ Ð½Ð° ÐºÐ»Ð°Ð²Ð¸Ð°Ñ‚ÑƒÑ€Ðµ
 void gfOnKeyDown( UINT key )
 {
     key;
@@ -471,7 +532,7 @@ void gfOnKeyDown( UINT key )
         gfDisplayMessage( "'A' key has been pressed" );
 }
 
-// Âûçûâàåòñÿ êîãäà ïîëüçîâàòåëü îòæèìàåò êëàâèøó íà êëàâèàòóðå
+// Ð’Ñ‹Ð·Ñ‹Ð²Ð°ÐµÑ‚ÑÑ ÐºÐ¾Ð³Ð´Ð° Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒ Ð¾Ñ‚Ð¶Ð¸Ð¼Ð°ÐµÑ‚ ÐºÐ»Ð°Ð²Ð¸ÑˆÑƒ Ð½Ð° ÐºÐ»Ð°Ð²Ð¸Ð°Ñ‚ÑƒÑ€Ðµ
 void gfOnKeyUp( UINT key )
 {
     key;
