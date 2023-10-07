@@ -1,4 +1,4 @@
-#include "StdAfx.h"
+п»ї#include "StdAfx.h"
 #include "GF.h"
 #include <vector>
 #include <stack>
@@ -87,6 +87,14 @@ void MoveObject(std::vector<iPoint>& obj, int x_axis, int y_axis) {
     for (int i = 0; i < n; i++) {
         obj[i].x += x_axis; // move start along x axis
         obj[i].y += y_axis; // move start along y axis
+    }
+}
+
+void ZoomObject(std::vector<iPoint>& obj, double scale) {
+    int n = obj.size();
+    for (int i = 0; i < n; i++) {
+        obj[i].x *= scale;
+        obj[i].y *= scale;
     }
 }
 
@@ -233,83 +241,144 @@ void FloodFill4(int x, int y, int width, int height, RGBPIXEL newColor, RGBPIXEL
     }
 }
 
-bool IsPointInPoligon(std::vector<iPoint> points, iPoint dot, bool flag) { // flag: EO/NZW mode
-    if (flag == true) {
-        int n = points.size();
-        int count = 0; // number of intersects
-        for (int i = 0; i < n; i++)
-        {
-            // if 2 segments intersected
-            iPoint dot1 = points[i];
-            iPoint dot2 = points[(i + 1) % n];
-            if (dot1.y == dot2.y)
-                continue;
-            if (dot.y < min(dot1.y, dot2.y))
-                continue;
-            if (dot.y >= max(dot1.y, dot2.y))
-                continue;
-            double x = dot1.x + (dot.y - dot1.y) * (dot2.x - dot1.x) / (dot2.y - dot1.y);
-            if (x > dot.x)
-                count++;
-        }
-        // EO mode, if count odd then point is in polygon
-        if (count % 2 == 1)
-        {
-            return true;
-        }
+enum CLPointType {
+    LEFT,
+    RIGHT,
+    BEYOND,
+    BEHIND,
+    BETWEEN,
+    ORIGIN,
+    DESTINATION
+};
+
+CLPointType Classify(iPoint p1, iPoint p2, iPoint p) {
+    int ax = p2.x - p1.x;  // рќ‘Ћ
+    int ay = p2.y - p1.y;
+    int bx = p.x - p1.x;  // рќ‘Џ
+    int by = p.y - p1.y;
+    int s = ax * by - bx * ay;
+    if (s > 0) return LEFT;
+    if (s < 0) return RIGHT;
+    if ((ax * bx < 0) || (ay * by < 0))  // РїСЂРѕС‚РёРІРѕРїРѕР»РѕР¶РЅРѕ РЅР°РїСЂР°РІР»РµРЅРёСЋ
+        return BEHIND;                   // РїРѕР·Р°РґРё
+    if ((ax * ax + ay * ay) < (bx * bx + by * by))
+        return BEYOND;               // РІРїРµСЂРµРґРё
+    if (p1.x == p.x && p1.y == p.y)  // СЃРѕРІРїР°РґР°РµС‚ СЃ РЅР°С‡Р°Р»РѕРј
+        return ORIGIN;
+    if (p2.x == p.x && p2.y == p.y)  // СЃРѕРІРїР°РґР°РµС‚ СЃ РєРѕРЅС†РѕРј
+        return DESTINATION;
+    return BETWEEN;  // РјРµР¶РґСѓ
+}
+
+enum IntersectType {
+    SAME,
+    PARALLEL,
+    SKEW,
+    SKEW_CROSS,
+    SKEW_NO_CROSS
+};
+
+IntersectType Intersect(iPoint a, iPoint b, iPoint c, iPoint d, double* t) {  // cd is line, ab is segment
+    double nx = d.y - c.y;                                                    // РІС‹С‡РёСЃР»РµРЅРёРµ РєРѕРѕСЂРґРёРЅР°С‚ рќ‘›
+    double ny = c.x - d.x;
+    CLPointType type;
+    double denom = nx * (b.x - a.x) + ny * (b.y - a.y);  // рќ‘› в€— рќ‘Џ в€’ рќ‘Ћ
+    if (denom == 0) {                                    // РїР°СЂР°Р»Р»РµР»СЊРЅС‹ РёР»Рё СЃРѕРІРїР°РґР°СЋС‚
+        type = Classify(c, d, a);                        // РїРѕР»РѕР¶РµРЅРёРµ С‚РѕС‡РєРё рќ‘Ћ РѕС‚РЅРѕСЃРёС‚РµР»СЊРЅРѕ РїСЂСЏРјРѕР№ рќ‘ђрќ‘‘
+        if (type == LEFT || type == RIGHT)
+            return PARALLEL;
         else
-        {
-            return false;
+            return SAME;
+    }
+    double num = nx * (a.x - c.x) + ny * (a.y - c.y);  // рќ‘› в€— рќ‘Ћ в€’ рќ‘ђ
+    *t = -num / denom;                                 // РїРѕ Р·РЅР°С‡РµРЅРёСЋ t РјРѕР¶РЅРѕ СЃРґРµР»Р°С‚СЊ РІС‹РІРѕРґ Рѕ РїРµСЂРµСЃРµС‡РµРЅРёРё РѕС‚СЂРµР·РєР° рќ‘Ћрќ‘Џ
+    return SKEW;
+}
+
+IntersectType Cross(iPoint a, iPoint b, iPoint c, iPoint d, double* tab, double* tcd) {
+    IntersectType type = Intersect(a, b, c, d, tab);
+    if (type == SAME || type == PARALLEL)
+        return type;
+    if ((*tab < 0) || (*tab > 1))
+        return SKEW_NO_CROSS;
+    Intersect(c, d, a, b, tcd);
+    if ((*tcd < 0) || (*tcd > 1))
+        return SKEW_NO_CROSS;
+    return SKEW_CROSS;
+}
+
+enum EType {
+    TOUCHING,
+    CROSS_LEFT,
+    CROSS_RIGHT,
+    INESSENTIAL
+};
+
+EType EdgeType(iPoint o, iPoint d, iPoint a) {
+    switch (Classify(o, d, a)) {
+    case LEFT:
+        if (a.y > o.y && a.y <= d.y)
+            return CROSS_LEFT;  // РїРµСЂРµСЃРµРєР°СЋС‰Р°СЏ, A СЃР»РµРІР°
+        else
+            return INESSENTIAL;  // Р±РµР·СЂР°Р·Р»РёС‡РЅР°СЏ
+    case RIGHT:
+        if (a.y > d.y && a.y <= o.y)
+            return CROSS_RIGHT;  // РїРµСЂРµСЃРµРєР°СЋС‰Р°СЏ, A СЃРїСЂР°РІР°
+        else
+            return INESSENTIAL;  // Р±РµР·СЂР°Р·Р»РёС‡РЅР°СЏ
+    case BETWEEN:
+    case ORIGIN:
+    case DESTINATION:
+        return TOUCHING;  // РєР°СЃР°СЋС‰Р°СЏСЃСЏ
+    default:
+        return INESSENTIAL;  // Р±РµР·СЂР°Р·Р»РёС‡РЅР°СЏ
+    }
+}
+
+bool PInPolygonEOMode(iPoint p, std::vector<iPoint> points) {
+    int param = 0;
+    int n = points.size();
+    for (int i = 0; i < n; i++) {
+        switch (EdgeType(points[i], points[(i + 1) % n], p)) {
+        case TOUCHING:  // РµСЃР»Рё Р»РµР¶РёС‚ РЅР° РїРѕР»РёРіРѕРЅРµ, С‚Рѕ Р·Р°РІРµРґРѕРјРѕ РїСЂРёРЅР°РґР»РµР¶РёС‚
+            return true;
+        case CROSS_LEFT:
+        case CROSS_RIGHT:
+            param = 1 - param;  // РёР·РјРµРЅСЏРµРј Р·РЅР°С‡РµРЅРёРµ С‡РµС‚РЅРѕСЃС‚Рё
+            break;
         }
     }
-    else {
-        int maxX = std::max_element(points.begin(), points.end(), [](iPoint a, iPoint b) { return a.x < b.x; })->x;
+    if (param == 1)
+        return true;
+    // РЅРµС‡РµС‚РЅРѕРµ
+    return false;
+}
 
-        // Enumerate all sides of the polygon.
-        // 
-        // Find out whether the side of the polygon intersected with the ray from the point dot 
-        // to the point with the farthest coordinate along the x axis.
-        // 
-        // If it intersects, then we find out the direction of traversing the side of the polygon.
-        // 
-        // Compare the coordinates of points that lie on the side of the polygon and on the ray.
-        // 
-        // If the y coordinate of the first point on the side of the polygon is greater than the 
-        // y coordinate of the second point on the side of the polygon, then traverse the side of 
-        // the polygon clockwise and count++ else count--
-        // 
-        // If the counter is greater than 0, then the point is inside the polygon
-        // 
-        // If the counter is less than 0, then the point is outside the polygon
-
-        // number of points
-        int n = points.size();
-        // number of intersects
-        int count = 0;
-        // enumerate all points
-        for (int i = 0; i < n; i++)
-        {
-            // if 2 segments itersected
-            iPoint dot1 = points[i];
-            iPoint dot2 = points[(i + 1) % n];
-            if (dot1.y == dot2.y)
-                continue;
-            if (dot.y < min(dot1.y, dot2.y))
-                continue;
-            if (dot.y >= max(dot1.y, dot2.y))
-                continue;
-            double x = dot1.x + (dot.y - dot1.y) * (dot2.x - dot1.x) / (dot2.y - dot1.y);
-            if (x > dot.x && dot1.y > dot2.y)
-                count--;
-            if (x > dot.x && dot1.y < dot2.y)
-                count++;
-        }
-        if (count > 0) {
+bool PInPolygonNZWMode(iPoint p, std::vector<iPoint> points) {
+    int winding = 0;
+    int n = points.size();
+    for (int i = 0; i < n; i++) {
+        switch (EdgeType(points[i], points[(i + 1) % n], p)) {
+        case TOUCHING:  // РµСЃР»Рё Р»РµР¶РёС‚ РЅР° РїРѕР»РёРіРѕРЅРµ, С‚Рѕ Р·Р°РІРµРґРѕРјРѕ РїСЂРёРЅР°РґР»РµР¶РёС‚
             return true;
+        case CROSS_LEFT:
+            winding--;
+            break;
+        case CROSS_RIGHT:
+            winding++;
+            break;
         }
-        else {
-            return false;
-        }
+    }
+    if (winding != 0) return true;
+    return false;
+}
+
+bool IsPointInPoligon(iPoint point, std::vector<iPoint> points, bool flag) { // flag: EO/NZW mode
+    if (flag == true) {
+        return PInPolygonEOMode(point, points);
+    }
+    else {
+        return PInPolygonNZWMode(point, points);
     }
 }
 
@@ -325,7 +394,7 @@ void ColorPoligon(std::vector<iPoint> points, RGBPIXEL color, bool flag)
     {
         for (int y = minY; y <= maxY; y++)
         {
-            if (IsPointInPoligon(points, iPoint(x, y), flag))
+            if (IsPointInPoligon(iPoint(x, y), points, flag))
             {
                 gfSetPixel(x, y, color);
             }
@@ -338,6 +407,7 @@ const std::vector<iPoint> STAR = { iPoint(0, 30), iPoint(30, 30), iPoint(40, 0),
                                   iPoint(50, 45), iPoint(60, 80), iPoint(40, 55), iPoint(20, 80), iPoint(30, 45) };
 const std::vector<iPoint> SQUARE = { iPoint(0, 0), iPoint(100, 0), iPoint(100, 100), iPoint(0, 100) };
 const std::vector<iPoint> OBJECT1 = { {0, 0}, {0, 100}, {50, 50}, {100, 100}, {100, 0} };
+const std::vector<iPoint> STAR2 = { iPoint(30,0), iPoint(50,60), iPoint(0,20), iPoint(60,20), iPoint(10,60) };
 
 void Lab1(int width, int height) {
     std::vector<iPoint> square = SQUARE;
@@ -373,17 +443,25 @@ void Lab1(int width, int height) {
     FloodFill4(x_triangle_pos + 10, y_triangle_pos + 10, width, height, RGBPIXEL::Yellow(), RGBPIXEL::Black());
 
     int rndp_size = 300;
-    std::vector<iPoint> random_polygon = GenerartePoligon(10, rndp_size, RGBPIXEL::Yellow());
+    // std::vector<iPoint> random_polygon = GenerartePoligon(10, rndp_size, RGBPIXEL::Yellow());
+    std::vector<iPoint> random_polygon = {
+        iPoint(30,0),
+        iPoint(50,60),
+        iPoint(0,20),
+        iPoint(60,20),
+        iPoint(10,60)
+    };
     int x_rnd_pos = 400, y_rnd_pos = 100;
+    ZoomObject(random_polygon, 4.5);
     MoveObject(random_polygon, x_rnd_pos, y_rnd_pos);
     PrintIsConvex(random_polygon, x_rnd_pos, y_rnd_pos);
-    MatchPoints(random_polygon, RGBPIXEL::Yellow());
+    MatchPoints(random_polygon, RGBPIXEL::Red());
     ColorPoligon(random_polygon, RGBPIXEL::White(), true);
     gfDrawText(x_rnd_pos, y_rnd_pos, "EO mode", RGBPIXEL::Red());
 
 
     MoveObject(random_polygon, 300, 0);
-    MatchPoints(random_polygon, RGBPIXEL::Yellow());
+    MatchPoints(random_polygon, RGBPIXEL::Red());
     ColorPoligon(random_polygon, RGBPIXEL::White(), false);
     gfDrawText(x_rnd_pos + 300, y_rnd_pos, "NZW mode", RGBPIXEL::Red());
 
@@ -410,8 +488,8 @@ bool gfInitScene()
     return true;
 }
 
-// Вызывается в цикле до момента выхода из приложения.
-// Следует использовать для создания анимационных эффектов
+// Р’С‹Р·С‹РІР°РµС‚СЃСЏ РІ С†РёРєР»Рµ РґРѕ РјРѕРјРµРЅС‚Р° РІС‹С…РѕРґР° РёР· РїСЂРёР»РѕР¶РµРЅРёСЏ.
+// РЎР»РµРґСѓРµС‚ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ РґР»СЏ СЃРѕР·РґР°РЅРёСЏ Р°РЅРёРјР°С†РёРѕРЅРЅС‹С… СЌС„С„РµРєС‚РѕРІ
 void gfDrawScene()
 {
     //gfClearScreen(RGBPIXEL::Black());
@@ -425,27 +503,27 @@ void gfDrawScene()
     //gfDrawRectangle(x - 10, y - 10, x + 10, y + 10, RGBPIXEL::Green());
 }
 
-// Вызывается один раз перед выходом из приложения.
-// Следует использовать для освобождения выделенных
-// ресурсов (памяти, файлов и т.п.)
+// Р’С‹Р·С‹РІР°РµС‚СЃСЏ РѕРґРёРЅ СЂР°Р· РїРµСЂРµРґ РІС‹С…РѕРґРѕРј РёР· РїСЂРёР»РѕР¶РµРЅРёСЏ.
+// РЎР»РµРґСѓРµС‚ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ РґР»СЏ РѕСЃРІРѕР±РѕР¶РґРµРЅРёСЏ РІС‹РґРµР»РµРЅРЅС‹С…
+// СЂРµСЃСѓСЂСЃРѕРІ (РїР°РјСЏС‚Рё, С„Р°Р№Р»РѕРІ Рё С‚.Рї.)
 void gfCleanupScene()
 {
 }
 
-// Вызывается когда пользователь нажимает левую кнопку мыши
+// Р’С‹Р·С‹РІР°РµС‚СЃСЏ РєРѕРіРґР° РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅР°Р¶РёРјР°РµС‚ Р»РµРІСѓСЋ РєРЅРѕРїРєСѓ РјС‹С€Рё
 void gfOnLMouseClick( int x, int y )
 {
     x; y;
     gfDrawRectangle(x - 10, y - 10, x + 10, y + 10, RGBPIXEL::Green());
 }
 
-// Вызывается когда пользователь нажимает правую кнопку мыши
+// Р’С‹Р·С‹РІР°РµС‚СЃСЏ РєРѕРіРґР° РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅР°Р¶РёРјР°РµС‚ РїСЂР°РІСѓСЋ РєРЅРѕРїРєСѓ РјС‹С€Рё
 void gfOnRMouseClick( int x, int y )
 {
     x; y;
 }
 
-// Вызывается когда пользователь нажимает клавишу на клавиатуре
+// Р’С‹Р·С‹РІР°РµС‚СЃСЏ РєРѕРіРґР° РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅР°Р¶РёРјР°РµС‚ РєР»Р°РІРёС€Сѓ РЅР° РєР»Р°РІРёР°С‚СѓСЂРµ
 void gfOnKeyDown( UINT key )
 {
     key;
@@ -454,7 +532,7 @@ void gfOnKeyDown( UINT key )
         gfDisplayMessage( "'A' key has been pressed" );
 }
 
-// Вызывается когда пользователь отжимает клавишу на клавиатуре
+// Р’С‹Р·С‹РІР°РµС‚СЃСЏ РєРѕРіРґР° РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РѕС‚Р¶РёРјР°РµС‚ РєР»Р°РІРёС€Сѓ РЅР° РєР»Р°РІРёР°С‚СѓСЂРµ
 void gfOnKeyUp( UINT key )
 {
     key;
