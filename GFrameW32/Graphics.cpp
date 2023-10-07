@@ -90,6 +90,14 @@ void MoveObject(std::vector<iPoint>& obj, int x_axis, int y_axis) {
     }
 }
 
+void ZoomObject(std::vector<iPoint>& obj, double scale) {
+    int n = obj.size();
+    for (int i = 0; i < n; i++) {
+        obj[i].x *= scale;
+        obj[i].y *= scale;
+    }
+}
+
 // Add limit range to generate points
 std::vector<iPoint> GenerartePoligon(int n, int size, RGBPIXEL color)
 {
@@ -338,6 +346,7 @@ const std::vector<iPoint> STAR = { iPoint(0, 30), iPoint(30, 30), iPoint(40, 0),
                                   iPoint(50, 45), iPoint(60, 80), iPoint(40, 55), iPoint(20, 80), iPoint(30, 45) };
 const std::vector<iPoint> SQUARE = { iPoint(0, 0), iPoint(100, 0), iPoint(100, 100), iPoint(0, 100) };
 const std::vector<iPoint> OBJECT1 = { {0, 0}, {0, 100}, {50, 50}, {100, 100}, {100, 0} };
+const std::vector<iPoint> STAR2 = { iPoint(30,0), iPoint(50,60), iPoint(0,20), iPoint(60,20), iPoint(10,60) };
 
 void Lab1(int width, int height) {
     std::vector<iPoint> square = SQUARE;
@@ -373,17 +382,25 @@ void Lab1(int width, int height) {
     FloodFill4(x_triangle_pos + 10, y_triangle_pos + 10, width, height, RGBPIXEL::Yellow(), RGBPIXEL::Black());
 
     int rndp_size = 300;
-    std::vector<iPoint> random_polygon = GenerartePoligon(10, rndp_size, RGBPIXEL::Yellow());
+    // std::vector<iPoint> random_polygon = GenerartePoligon(10, rndp_size, RGBPIXEL::Yellow());
+    std::vector<iPoint> random_polygon = {
+        iPoint(30,0),
+        iPoint(50,60),
+        iPoint(0,20),
+        iPoint(60,20),
+        iPoint(10,60)
+    };
     int x_rnd_pos = 400, y_rnd_pos = 100;
+    ZoomObject(random_polygon, 4.5);
     MoveObject(random_polygon, x_rnd_pos, y_rnd_pos);
     PrintIsConvex(random_polygon, x_rnd_pos, y_rnd_pos);
-    MatchPoints(random_polygon, RGBPIXEL::Yellow());
+    MatchPoints(random_polygon, RGBPIXEL::Red());
     ColorPoligon(random_polygon, RGBPIXEL::White(), true);
     gfDrawText(x_rnd_pos, y_rnd_pos, "EO mode", RGBPIXEL::Red());
 
 
     MoveObject(random_polygon, 300, 0);
-    MatchPoints(random_polygon, RGBPIXEL::Yellow());
+    MatchPoints(random_polygon, RGBPIXEL::Red());
     ColorPoligon(random_polygon, RGBPIXEL::White(), false);
     gfDrawText(x_rnd_pos + 300, y_rnd_pos, "NZW mode", RGBPIXEL::Red());
 
