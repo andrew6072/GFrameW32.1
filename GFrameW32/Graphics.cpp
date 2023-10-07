@@ -235,14 +235,11 @@ void FloodFill4(int x, int y, int width, int height, RGBPIXEL newColor, RGBPIXEL
 
 bool IsPointInPoligon(std::vector<iPoint> points, iPoint dot, bool flag) { // flag: EO/NZW mode
     if (flag == true) {
-        // Переменная для хранения количества точек
         int n = points.size();
-        // Переменная для хранения количества пересечений
-        int count = 0;
-        // Перебираем точки
+        int count = 0; // number of intersects
         for (int i = 0; i < n; i++)
         {
-            // Если отрезки пересекаются
+            // if 2 segments intersected
             iPoint dot1 = points[i];
             iPoint dot2 = points[(i + 1) % n];
             if (dot1.y == dot2.y)
@@ -255,7 +252,7 @@ bool IsPointInPoligon(std::vector<iPoint> points, iPoint dot, bool flag) { // fl
             if (x > dot.x)
                 count++;
         }
-        // Если количество пересечений нечетное, то точка внутри многоугольника
+        // EO mode, if count odd then point is in polygon
         if (count % 2 == 1)
         {
             return true;
@@ -266,27 +263,33 @@ bool IsPointInPoligon(std::vector<iPoint> points, iPoint dot, bool flag) { // fl
         }
     }
     else {
-        // Ввести новую переменную, которая хранит самую дальнюю координату по оси х 
         int maxX = std::max_element(points.begin(), points.end(), [](iPoint a, iPoint b) { return a.x < b.x; })->x;
 
-        // Перебрать все стороны многоульника
-        // Узнаю пересеклась ли сторона многоугольника с лучом от точки dot до точки с самой дальней координатой по оси х
-        // Если пересеклась, то узнаем направление обхода стороны многоугольника
-        // Сравниваем координаты точек, которые лежат на стороне многоугольника и на луче
-        // Если координата по y первой точки на стороне мноугольника больше чем координата по y второй точки на стороне многоугольника, то обход стороны многоугольника по часовой стрелке
-        // Давляем в счетчик +1
-        // Если нет, то -1
-        // Если счетчик больше 0, то точка внутри многоугольника
-        // Если счетчик меньше 0, то точка вне многоугольника
+        // Enumerate all sides of the polygon.
+        // 
+        // Find out whether the side of the polygon intersected with the ray from the point dot 
+        // to the point with the farthest coordinate along the x axis.
+        // 
+        // If it intersects, then we find out the direction of traversing the side of the polygon.
+        // 
+        // Compare the coordinates of points that lie on the side of the polygon and on the ray.
+        // 
+        // If the y coordinate of the first point on the side of the polygon is greater than the 
+        // y coordinate of the second point on the side of the polygon, then traverse the side of 
+        // the polygon clockwise and count++ else count--
+        // 
+        // If the counter is greater than 0, then the point is inside the polygon
+        // 
+        // If the counter is less than 0, then the point is outside the polygon
 
-        // Переменная для хранения количества точек
+        // number of points
         int n = points.size();
-        // Переменная для хранения количества пересечений
+        // number of intersects
         int count = 0;
-        // Перебираем точки
+        // enumerate all points
         for (int i = 0; i < n; i++)
         {
-            // Если отрезки пересекаются
+            // if 2 segments itersected
             iPoint dot1 = points[i];
             iPoint dot2 = points[(i + 1) % n];
             if (dot1.y == dot2.y)
@@ -312,22 +315,18 @@ bool IsPointInPoligon(std::vector<iPoint> points, iPoint dot, bool flag) { // fl
 
 void ColorPoligon(std::vector<iPoint> points, RGBPIXEL color, bool flag)
 {
-    // Определить максимальные и минимальные значения x и y в points, используя stl
-
     int minX = std::min_element(points.begin(), points.end(), [](iPoint a, iPoint b) { return a.x < b.x; })->x;
     int maxX = std::max_element(points.begin(), points.end(), [](iPoint a, iPoint b) { return a.x < b.x; })->x;
     int minY = std::min_element(points.begin(), points.end(), [](iPoint a, iPoint b) { return a.y < b.y; })->y;
     int maxY = std::max_element(points.begin(), points.end(), [](iPoint a, iPoint b) { return a.y < b.y; })->y;
 
-    // Перебираем все точки внутри прямоугольника
+    // enumerate all points in polygon
     for (int x = minX; x <= maxX; x++)
     {
         for (int y = minY; y <= maxY; y++)
         {
-            // Если точка внутри многоугольника
             if (IsPointInPoligon(points, iPoint(x, y), flag))
             {
-                // Закрашиваем точку
                 gfSetPixel(x, y, color);
             }
         }
