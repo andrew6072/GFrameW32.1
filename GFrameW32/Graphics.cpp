@@ -2,6 +2,7 @@
 #include "GF.h"
 #include <vector>
 #include <stack>
+#include <iostream>
 
 #ifndef M_PI
 const double M_PI = 3.1415926535897932384626433832795;
@@ -382,22 +383,231 @@ bool IsPointInPoligon(iPoint point, std::vector<iPoint> points, bool flag) { // 
     }
 }
 
-void ColorPoligon(std::vector<iPoint> points, RGBPIXEL color, bool flag)
-{
+void ColorPoligon(std::vector<iPoint> points, RGBPIXEL color, bool flag) {
     int minX = std::min_element(points.begin(), points.end(), [](iPoint a, iPoint b) { return a.x < b.x; })->x;
     int maxX = std::max_element(points.begin(), points.end(), [](iPoint a, iPoint b) { return a.x < b.x; })->x;
     int minY = std::min_element(points.begin(), points.end(), [](iPoint a, iPoint b) { return a.y < b.y; })->y;
     int maxY = std::max_element(points.begin(), points.end(), [](iPoint a, iPoint b) { return a.y < b.y; })->y;
 
     // enumerate all points in polygon
-    for (int x = minX; x <= maxX; x++)
-    {
-        for (int y = minY; y <= maxY; y++)
-        {
-            if (IsPointInPoligon(iPoint(x, y), points, flag))
-            {
+    for (int x = minX; x <= maxX; x++) {
+        for (int y = minY; y <= maxY; y++) {
+            if (IsPointInPoligon(iPoint(x, y), points, flag)) {
                 gfSetPixel(x, y, color);
             }
+        }
+    }
+}
+
+int Factorial(int n) {
+    if (n == 0)
+        return 1;
+    else
+        return n * Factorial(n - 1);
+}
+
+double Bernstein(int n, int i, double t) {
+    return Factorial(n) / (Factorial(i) * Factorial(n - i)) * pow(t, i) * pow(1 - t, n - i);
+}
+
+int Dist(iPoint point) {
+    return abs(point.x) + abs(point.y);
+}
+
+void BezierCurve3rd(std::vector<iPoint> points, RGBPIXEL color) {
+    /*
+    * This function connects every 2 points by a line with step = 1/ N.git 
+    */
+    int n = points.size();
+    double xprev = points[0].x;
+    double yprev = points[0].y;
+    int h = max(Dist(points[0] - 2 * points[1] + points[2]), Dist(points[1] - 2 * points[2] + points[3]));
+    int N = 1 + sqrt(3 * h);
+    for (double t = 0; t < 1 + 1.0 / (2 * N); t += 1.0 / N) {
+        double x = 0;
+        double y = 0;
+        for (int i = 0; i < n; i++) {
+            x += points[i].x * Bernstein(n - 1, i, t);
+            y += points[i].y * Bernstein(n - 1, i, t);
+        }
+        DrawLine(xprev, yprev, x, y, color);
+        xprev = x;
+        yprev = y;
+    }
+}
+
+void BezierCurve(std::vector<iPoint> points, RGBPIXEL color) {
+    /*
+    * Draws Bezier curve of any order using Parametric equation.
+    * This function constructs Bezier curve by scattering points
+    * that are in trjectory of the Parametric equation.
+    * Step = 0.001
+    */
+    int n = points.size();
+    for (double t = 0; t <= 1; t += 0.001){
+        double x = 0;
+        double y = 0;
+        for (int i = 0; i < n; i++){
+            x += Bernstein(n - 1, i, t) * points[i].x;
+            y += Bernstein(n - 1, i, t) * points[i].y;
+        }
+        gfSetPixel(x, y, color);
+    }
+}
+
+// Defining region codes
+const int CLIP_INSIDE = 0;  // 0000
+const int CLIP_LEFT = 1;    // 0001
+const int CLIP_RIGHT = 2;   // 0010
+const int CLIP_BOTTOM = 4;  // 0100
+const int CLIP_TOP = 8;     // 1000
+
+// Defining x_max, y_max and x_min, y_min for
+// clipping rectangle. Since diagonal points are
+// enough to define a rectangle
+
+// Function to compute region code for a point(x, y)
+int ComputeCode(double x, double y, int x_min, int x_max, int y_min, int y_max) {
+    // initialized as being inside
+    int code = CLIP_INSIDE;
+
+    if (x < x_min)  // to the left of rectangle
+        code |= CLIP_LEFT;
+    else if (x > x_max)  // to the right of rectangle
+        code |= CLIP_RIGHT;
+    if (y < y_min)  // below the rectangle
+        code |= CLIP_BOTTOM;
+    else if (y > y_max)  // above the rectangle
+        code |= CLIP_TOP;
+
+    return code;
+}
+
+// Implementing Cohen-Sutherland algorithm
+// Clipping a line from P1 = (x2, y2) to P2 = (x2, y2)
+void CohenSutherlandClip(iPoint p1, iPoint p2, int x_min, int x_max, int y_min, int y_max) {
+    double x1 = p1.x, y1 = p1.y;
+    double x2 = p2.x, y2 = p2.y;
+    // Compute region codes for P1, P2
+    int code1 = ComputeCode(x1, y1, x_min, x_max, y_min, y_max);
+    int code2 = ComputeCode(x2, y2, x_min, x_max, y_min, y_max);
+
+    // Initialize line as outside the rectangular window
+    bool accept = false;
+
+    while (true) {
+        if ((code1 == 0) && (code2 == 0)) {
+            // If both endpoints lie within rectangle
+            accept = true;
+            break;
+        }
+        else if (code1 & code2) {
+            // If both endpoints are outside rectangle,
+            // in same region
+            break;
+        }
+        else {
+            // Some segment of line lies within the
+            // rectangle
+            int code_out;
+            double x, y;
+
+            // At least one endpoint is outside the
+            // rectangle, pick it.
+            if (code1 != 0)
+                code_out = code1;
+            else
+                code_out = code2;
+
+            // Find intersection point;
+            // using formulas y = y1 + slope * (x - x1),
+            // x = x1 + (1 / slope) * (y - y1)
+            if (code_out & CLIP_TOP) {
+                // point is above the clip rectangle
+                x = x1 + (x2 - x1) * (y_max - y1) / (y2 - y1);
+                y = y_max;
+            }
+            else if (code_out & CLIP_BOTTOM) {
+                // point is below the rectangle
+                x = x1 + (x2 - x1) * (y_min - y1) / (y2 - y1);
+                y = y_min;
+            }
+            else if (code_out & CLIP_RIGHT) {
+                // point is to the right of rectangle
+                y = y1 + (y2 - y1) * (x_max - x1) / (x2 - x1);
+                x = x_max;
+            }
+            else if (code_out & CLIP_LEFT) {
+                // point is to the left of rectangle
+                y = y1 + (y2 - y1) * (x_min - x1) / (x2 - x1);
+                x = x_min;
+            }
+
+            // Now intersection point x, y is found
+            // We replace point outside rectangle
+            // by intersection point
+            if (code_out == code1) {
+                x1 = x;
+                y1 = y;
+                code1 = ComputeCode(x1, y1, x_min, x_max, y_min, y_max);
+            }
+            else {
+                x2 = x;
+                y2 = y;
+                code2 = ComputeCode(x2, y2, x_min, x_max, y_min, y_max);
+            }
+        }
+    }
+    
+    if (accept) {
+        std::cout << "Line accepted from " << x1 << ", "
+            << y1 << " to " << x2 << ", " << y2 << std::endl;
+        // Here the user can add code to display the rectangle
+        // along with the accepted (portion of) lines
+        DrawLine(p1.x, p1.y, p2.x, p2.y, RGBPIXEL::Red());
+        DrawLine(x1, y1, x2, y2, RGBPIXEL::Green());
+    }
+    else {
+        std::cout << "Line rejected" << std::endl;
+        DrawLine(p1.x, p1.y, p2.x, p2.y, RGBPIXEL::Red());
+    }
+    DrawLine(x_min, y_min, x_min, y_max, RGBPIXEL::Yellow());
+    DrawLine(x_min, y_max, x_max, y_max, RGBPIXEL::Yellow());
+    DrawLine(x_max, y_max, x_max, y_min, RGBPIXEL::Yellow());
+    DrawLine(x_max, y_min, x_min, y_min, RGBPIXEL::Yellow());
+}
+
+void CuttingLineArbitraryPolygon(std::vector<iPoint> points, iPoint point1, iPoint point2, RGBPIXEL color)
+{
+    int dx = point2.x - point1.x;
+    int dy = point2.y - point1.y;
+    int sx = (dx > 0) ? 1 : -1;
+    int sy = (dy > 0) ? 1 : -1;
+    dx = abs(dx);
+    dy = abs(dy);
+    int err = dx - dy;
+    int e2;
+    MatchPoints(points, RGBPIXEL::Yellow());
+    DrawLine(point1.x, point1.y, point2.x, point2.y, RGBPIXEL::Red());
+    while (true)
+    {
+        if (IsPointInPoligon(point1, points, true))
+        {
+            gfSetPixel(point1.x, point1.y, color);
+        }
+
+        if (point1.x == point2.x && point1.y == point2.y)
+            break;
+        e2 = 2 * err;
+        if (e2 > -dy)
+        {
+            err -= dy;
+            point1.x += sx;
+        }
+        if (e2 < dx)
+        {
+            err += dx;
+            point1.y += sy;
         }
     }
 }
@@ -469,6 +679,27 @@ void Lab1(int width, int height) {
 
 }
 
+void lab2() {
+    /*CohenSutherlandClip(iPoint(100, 400), iPoint(400, 700), 200, 600, 200, 600);
+    CohenSutherlandClip(iPoint(100, 600), iPoint(300, 800), 200, 600, 200, 600);
+    CohenSutherlandClip(iPoint(400, 500), iPoint(600, 700), 200, 600, 200, 600);
+    CohenSutherlandClip(iPoint(100, 700), iPoint(700, 100), 200, 600, 200, 600);
+    CohenSutherlandClip(iPoint(300, 400), iPoint(500, 400), 200, 600, 200, 600);*/
+    std::vector<iPoint> star = STAR;
+    double scale = 8;
+    ZoomObject(star, scale);
+    CuttingLineArbitraryPolygon(star, iPoint(20 * scale, 20 * scale), iPoint(60 * scale, 20 * scale), RGBPIXEL::Green());
+    CuttingLineArbitraryPolygon(star, iPoint(30 * scale, 80 * scale), iPoint(80 * scale, 10 * scale), RGBPIXEL::Green());
+
+
+    std::vector<iPoint> test = SQUARE;
+    MoveObject(test, 800, 200);
+    BezierCurve3rd(test, RGBPIXEL(255, 255, 255));
+
+    MoveObject(test, 0, 200);
+    BezierCurve(test, RGBPIXEL::Yellow());
+}
+
 bool gfInitScene()
 {
     int width = 2*640;
@@ -486,7 +717,8 @@ bool gfInitScene()
 
     //gfDisplayMessage("Message!");
 
-    Lab1(width, height);
+    //Lab1(width, height);
+    lab2();
     return true;
 }
 
