@@ -577,6 +577,29 @@ void CohenSutherlandClip(iPoint p1, iPoint p2, int x_min, int x_max, int y_min, 
     DrawLine(x_max, y_min, x_min, y_min, RGBPIXEL::Yellow());
 }
 
+double ParamEquaCatmullRom(double p0, double p1, double p2, double p3, double t) {
+    return 0.5 * (-t * (1 - t) * (1 - t) * p0 + (2 - 5 * t * t + 3 * t * t * t) * p1 + t * (1 + 4 * t - 3 * t * t) * p2 - t * t * (1 - t) * p3);
+}
+
+void CatmullRomCurve4points(iPoint p0, iPoint p1, iPoint p2, iPoint p3, RGBPIXEL color) {
+    double step = 0.0001;
+    for (double t = 0; t <= 1; t += step) {
+        double x = 0;
+        double y = 0;
+        x += ParamEquaCatmullRom(p0.x, p1.x, p2.x, p3.x, t);
+        y += ParamEquaCatmullRom(p0.y, p1.y, p2.y, p3.y, t);
+        gfSetPixel(x, y, color);
+    }
+}
+
+void CatmullRomCurveNpoints(std::vector<iPoint> points, RGBPIXEL color) {
+    int n = points.size();
+    if (n < 4) return;
+    for (int i = 3; i < n; i++) {
+        CatmullRomCurve4points(points[i - 3], points[i - 2], points[i - 1], points[i], color);
+    }
+}
+
 void CuttingLineArbitraryPolygon(std::vector<iPoint> points, iPoint point1, iPoint point2, RGBPIXEL color)
 {
     int dx = point2.x - point1.x;
@@ -700,6 +723,393 @@ void lab2() {
     BezierCurve(test, RGBPIXEL::Yellow());
 }
 
+// Построение параллельной проекции повернутого параллелепипеда на плоскость Z=n
+void BuildParallelProjection(
+    double n,
+    double x0, double y0, double z0,
+    double angle_x, double angle_y, double angle_z,
+    dVector dir, double angle,
+    RGBPIXEL color,
+    double width, double height, double depth,
+    bool isWireframe
+)
+{
+    // Создание массива точек параллелепипеда
+    std::vector<dVector4> points = {
+        { -0.5, -0.5, -0.5, 1},
+        { 0.5, -0.5, -0.5, 1},
+        { 0.5, 0.5, -0.5, 1},
+        { -0.5, 0.5, -0.5, 1},
+        { -0.5, -0.5, 0.5, 1},
+        { 0.5, -0.5, 0.5, 1},
+        { 0.5, 0.5, 0.5, 1},
+        { -0.5, 0.5, 0.5, 1}
+    };
+
+    // Создание массива внутренних нормалей граней
+    std::vector<dVector4> normals = {
+        { 0, 0, 1, 1 },
+        { 0, 0, -1, 1 },
+        { 0, 1, 0, 1 },
+        { -1, 0, 0, 1 },
+        { 0, -1, 0, 1 },
+        { 1, 0, 0, 1 }
+    };
+
+    // Создание матрицы масштабирования
+    dMatrix scale = dMatrix::ScalingTransform({ width, height, depth });
+
+    // Масштабирование точек
+    for (auto& point : points)
+    {
+        point = scale.TransformAffineHomomorphic(point);
+    }
+
+    // Создание матрицы поворота на угол alpha_x вокруг оси X
+    dMatrix rotationX = dMatrix::RotationXTransform(angle_x);
+
+    // Создание матрицы поворота на угол alpha_y вокруг оси Y
+    dMatrix rotationY = dMatrix::RotationYTransform(angle_y);
+
+    // Создание матрицы поворота на угол alpha_z вокруг оси Z
+    dMatrix rotationZ = dMatrix::RotationZTransform(angle_z);
+
+    // Создание матрицы поворота вокруг произвольной оси
+    dir = dir.Normalize();
+    dMatrix rotationDir = dMatrix::RotationTransform(dir, angle);
+
+    // Создание матрицы поворота
+    dMatrix rotation = rotationX * rotationY * rotationZ * rotationDir;
+
+    // Поворот всех точек параллелепипеда
+    for (auto& point : points)
+    {
+        point = rotation.TransformAffineHomomorphic(point);
+    }
+    for (auto& normal : normals)
+    {
+        normal = rotation.TransformAffineHomomorphic(normal);
+    }
+
+    // Создание матрицы проекции
+    dMatrix projection = {
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 0, 0,
+        0, 0, n, 1
+    };
+
+    // Проекция всех точек параллелепипеда
+    for (auto& point : points)
+    {
+        point = projection.TransformAffineHomomorphic(point);
+    }
+
+    // Создание матрицы переноса
+    dMatrix translation = dMatrix::MovementTransform({ x0, y0, z0 });
+
+    // Перенос всех точек параллелепипеда
+    for (auto& point : points)
+    {
+        point = translation.TransformAffineHomomorphic(point);
+    }
+
+    if (isWireframe)
+    {
+        // Вывод параллелепипеда на экран
+        for (int i = 0; i < 4; i++)
+        {
+            // Содание iPoints - массива точек для вывода на экран
+            std::vector<iPoint> iPoints = {
+                { int(points[i].x), int(points[i].y) },
+                { int(points[(i + 1) % 4].x), int(points[(i + 1) % 4].y) },
+                { int(points[(i + 1) % 4 + 4].x), int(points[(i + 1) % 4 + 4].y) },
+                { int(points[i + 4].x), int(points[i + 4].y) }
+            };
+            // Построение линий
+            for (int j = 0; j < 4; j++)
+            {
+                DrawLine(iPoints[j].x, iPoints[j].y, iPoints[(j + 1) % 4].x, iPoints[(j + 1) % 4].y, color);
+            }
+        }
+    }
+    else
+    {
+        // Создание массива граней
+        std::vector<std::vector<int>> faces = {
+            { 0, 1, 2, 3 },
+            { 4, 5, 6, 7 },
+            { 0, 1, 5, 4 },
+            { 1, 2, 6, 5 },
+            { 2, 3, 7, 6 },
+            { 3, 0, 4, 7 }
+        };
+
+        // Создание вектора наблюдателя
+        dVector observer = { 0, 0, 1 };
+
+        // Вывод граней на экран при условии, что скалярное произведение нормали грани и вектора наблюдателя больше нуля
+        for (int i = 0; i < 6; i++)
+        {
+            if (normals[i].z < 0)
+            {
+                // Создание массива точек для вывода на экран
+                std::vector<iPoint> iPoints = {
+                    { int(points[faces[i][0]].x), int(points[faces[i][0]].y) },
+                    { int(points[faces[i][1]].x), int(points[faces[i][1]].y) },
+                    { int(points[faces[i][2]].x), int(points[faces[i][2]].y) },
+                    { int(points[faces[i][3]].x), int(points[faces[i][3]].y) }
+                };
+                // Построение линий грани
+                for (int j = 0; j < 4; j++)
+                {
+                    DrawLine(iPoints[j].x, iPoints[j].y, iPoints[(j + 1) % 4].x, iPoints[(j + 1) % 4].y, color);
+                }
+            }
+        }
+    }
+}
+
+// Построение одноточечной перспективной проекции повернутого параллелепипеда с точкой схода (0, 0, k)
+void BuildPerspectiveProjection(
+    double k,
+    double x0, double y0, double z0,
+    double angle_x, double angle_y, double angle_z,
+    dVector dir, double angle,
+    RGBPIXEL color,
+    double width, double height, double depth,
+    bool isWireframe
+)
+{
+    // Создание массива точек параллелепипеда
+    std::vector<dVector4> points = {
+        { -0.5, -0.5, -0.5, 1},
+        { 0.5, -0.5, -0.5, 1},
+        { 0.5, 0.5, -0.5, 1},
+        { -0.5, 0.5, -0.5, 1},
+        { -0.5, -0.5, 0.5, 1},
+        { 0.5, -0.5, 0.5, 1},
+        { 0.5, 0.5, 0.5, 1},
+        { -0.5, 0.5, 0.5, 1}
+    };
+
+    // Создание точки схода
+    dVector4 pointOfView = { 0, 0, k, 1 };
+
+    // Создание матрицы масштабирования
+    dMatrix scale = dMatrix::ScalingTransform({ width, height, depth });
+
+    // Масштабирование точек
+    for (auto& point : points)
+    {
+        point = scale.TransformAffineHomomorphic(point);
+    }
+    pointOfView = scale.TransformAffineHomomorphic(pointOfView);
+
+    // Создание матрицы поворота на угол alpha_x вокруг оси X
+    dMatrix rotationX = dMatrix::RotationXTransform(angle_x);
+
+    // Создание матрицы поворота на угол alpha_y вокруг оси Y
+    dMatrix rotationY = dMatrix::RotationYTransform(angle_y);
+
+    // Создание матрицы поворота на угол alpha_z вокруг оси Z
+    dMatrix rotationZ = dMatrix::RotationZTransform(angle_z);
+
+    // Создание матрицы поворота вокруг произвольной оси
+    dir = dir.Normalize();
+    dMatrix rotationDir = dMatrix::RotationTransform(dir, angle);
+
+    // Создание матрицы поворота
+    dMatrix rotation = rotationX * rotationY * rotationZ * rotationDir;
+
+    // Поворот всех точек параллелепипеда
+    for (auto& point : points)
+    {
+        point = rotation.TransformAffineHomomorphic(point);
+    }
+    pointOfView = rotation.TransformAffineHomomorphic(pointOfView);
+
+    // Создание матрицы проекции
+    dMatrix projection = {
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 1 / k,
+        0, 0, 0, 1
+    };
+
+    // Проекция всех точек параллелепипеда
+    for (auto& point : points)
+    {
+        point = projection.TransformAffineHomomorphic(point);
+    }
+    pointOfView = projection.TransformAffineHomomorphic(pointOfView);
+
+    // Создание матрицы переноса
+    dMatrix translation = dMatrix::MovementTransform({ x0, y0, z0 });
+
+    // Перенос всех точек параллелепипеда
+    for (auto& point : points)
+    {
+        point = translation.TransformAffineHomomorphic(point);
+    }
+    pointOfView = translation.TransformAffineHomomorphic(pointOfView);
+
+    if (isWireframe)
+    {
+        // Вывод параллелепипеда на экран
+        for (int i = 0; i < 4; i++)
+        {
+            // Содание iPoints - массива точек для вывода на экран
+            std::vector<iPoint> iPoints = {
+                { int(points[i].x), int(points[i].y) },
+                { int(points[(i + 1) % 4].x), int(points[(i + 1) % 4].y) },
+                { int(points[(i + 1) % 4 + 4].x), int(points[(i + 1) % 4 + 4].y) },
+                { int(points[i + 4].x), int(points[i + 4].y) }
+            };
+            // Построение линий
+            for (int j = 0; j < 4; j++)
+            {
+                DrawLine(iPoints[j].x, iPoints[j].y, iPoints[(j + 1) % 4].x, iPoints[(j + 1) % 4].y, color);
+            }
+        }
+
+        // Построить линии из точки схода в точки параллелепипеда
+        for (int i = 0; i < 4; i++)
+        {
+            DrawLine(int(pointOfView.x), int(pointOfView.y), int(points[i].x), int(points[i].y), RGBPIXEL::Red());
+        }
+    }
+    else
+    {
+        // Создание массива граней
+        std::vector<std::vector<int>> faces = {
+            { 0, 1, 2, 3 },
+            { 4, 5, 6, 7 },
+            { 0, 1, 5, 4 },
+            { 1, 2, 6, 5 },
+            { 2, 3, 7, 6 },
+            { 3, 0, 4, 7 }
+        };
+
+        // Создание функции определения вектора по двум точкам
+        auto VectorByTwoPoints = [](dVector4 a, dVector4 b) -> dVector
+            {
+                return {
+                    b.x - a.x,
+                    b.y - a.y,
+                    b.z - a.z
+                };
+            };
+
+        // Создание массива нормалей как векторное произведение ребер граней
+        std::vector<dVector> faceNormals = {
+            VectorByTwoPoints(points[0], points[1]) ^ VectorByTwoPoints(points[0], points[3]),
+            VectorByTwoPoints(points[4], points[7]) ^ VectorByTwoPoints(points[4], points[5]),
+            VectorByTwoPoints(points[0], points[4]) ^ VectorByTwoPoints(points[0], points[1]),
+            VectorByTwoPoints(points[1], points[5]) ^ VectorByTwoPoints(points[1], points[2]),
+            VectorByTwoPoints(points[2], points[6]) ^ VectorByTwoPoints(points[2], points[3]),
+            VectorByTwoPoints(points[3], points[7]) ^ VectorByTwoPoints(points[3], points[0])
+        };
+
+        // Вывод граней на экран при условии, что скалярное произведение нормали грани и вектора наблюдателя больше нуля
+        for (int i = 0; i < 6; i++)
+        {
+            if (faceNormals[i].z < 0)
+            {
+                // Создание массива точек для вывода на экран
+                std::vector<iPoint> iPoints = {
+                    { int(points[faces[i][0]].x), int(points[faces[i][0]].y) },
+                    { int(points[faces[i][1]].x), int(points[faces[i][1]].y) },
+                    { int(points[faces[i][2]].x), int(points[faces[i][2]].y) },
+                    { int(points[faces[i][3]].x), int(points[faces[i][3]].y) }
+                };
+                // Построение линий грани
+                for (int j = 0; j < 4; j++)
+                {
+                    DrawLine(iPoints[j].x, iPoints[j].y, iPoints[(j + 1) % 4].x, iPoints[(j + 1) % 4].y, color);
+                }
+            }
+        }
+    }
+}
+
+void lab3() {
+    gfClearScreen(RGBPIXEL::Black());
+
+    static double angle = 0;
+    BuildParallelProjection(
+        0, // n
+        gfGetWindowWidth() / 4, gfGetWindowHeight() / 6, 0, // x0, y0, z0 
+        M_PI / 10, -M_PI / 8, M_PI / 2, // angle_x, angle_y, angle_z
+        { 1, 0, 0 }, 0, // dir, angle
+        RGBPIXEL::Yellow(), // color
+        75, 100, 100, // width, height, depth
+        true // isWireframe
+    );
+
+    BuildPerspectiveProjection(
+        -200, // k
+        3 * gfGetWindowWidth() / 4, gfGetWindowHeight() / 6, 0, // x0, y0, z0 
+        M_PI / 10, -M_PI / 8, M_PI / 2, // angle_x, angle_y, angle_z
+        { 1, 0, 0 }, 0, // dir, angle
+        RGBPIXEL::Yellow(), // color 
+        75, 100, 100, // width, height, depth
+        true // isWireframe
+    );
+    BuildParallelProjection(
+        0, // n
+        gfGetWindowWidth() / 4, 3 * gfGetWindowHeight() / 6, 0, // x0, y0, z0
+        M_PI / 10, -M_PI / 8, M_PI / 2, // angle_x, angle_y, angle_z
+        { 1, 0, 0 }, 0, // dir, angle
+        RGBPIXEL::Yellow(), // color
+        75, 100, 100, // width, height, depth
+        false // isWireframe
+    );
+    BuildPerspectiveProjection(
+        -200, // k
+        3 * gfGetWindowWidth() / 4, 3 * gfGetWindowHeight() / 6, 0, // x0, y0, z0
+        M_PI / 10, -M_PI / 8, M_PI / 2, // angle_x, angle_y, angle_z
+        { 1, 0, 0 }, 0, // dir, angle
+        RGBPIXEL::Yellow(), // color 
+        75, 100, 100, // width, height, depth
+        false // isWireframe
+    );
+    BuildParallelProjection(
+        0, // n
+        gfGetWindowWidth() / 4, 5 * gfGetWindowHeight() / 6, 0, // x0, y0, z0
+        M_PI / 10, -M_PI / 8, M_PI / 2, // angle_x, angle_y, angle_z
+        { 0, 1, 0 }, angle, // dir, angle
+        RGBPIXEL::Yellow(), // color
+        75, 100, 100, // width, height, depth
+        false // isWireframe
+    );
+    BuildPerspectiveProjection(
+        -200, // k
+        3 * gfGetWindowWidth() / 4, 5 * gfGetWindowHeight() / 6, 0, // x0, y0, z0
+        M_PI / 10, -M_PI / 8, M_PI / 2, // angle_x, angle_y, angle_z
+        { 0, 1, 0 }, angle, // dir, angle
+        RGBPIXEL::Yellow(), // color
+        75, 100, 100, // width, height, depth
+        false // isWireframe
+    );
+    angle += 0.005;
+    if (angle > 2 * M_PI)
+    {
+        angle -= 2 * M_PI;
+    }
+}
+
+void bdz() {
+    std::vector<iPoint> star = STAR;
+    double scale = 8;
+    ZoomObject(star, scale);
+    CuttingLineArbitraryPolygon(star, iPoint(20 * scale, 20 * scale), iPoint(60 * scale, 20 * scale), RGBPIXEL::Green());
+    CuttingLineArbitraryPolygon(star, iPoint(30 * scale, 80 * scale), iPoint(80 * scale, 10 * scale), RGBPIXEL::Green());
+    std::vector<iPoint> points_catmul = { iPoint(100,100), iPoint(100,200), iPoint(200,200), iPoint(200,100), iPoint(400,100) , iPoint(200,0), iPoint(400,0) };
+    MoveObject(points_catmul, 600, 100);
+    CatmullRomCurveNpoints(points_catmul, RGBPIXEL::Yellow());
+}
+
 bool gfInitScene()
 {
     int width = 2*640;
@@ -718,7 +1128,8 @@ bool gfInitScene()
     //gfDisplayMessage("Message!");
 
     //Lab1(width, height);
-    lab2();
+    //lab2();
+    //bdz();
     return true;
 }
 
@@ -726,7 +1137,7 @@ bool gfInitScene()
 // Следует использовать для создания анимационных эффектов
 void gfDrawScene()
 {
-    //gfClearScreen(RGBPIXEL::Black());
+    //gfclearscreen(rgbpixel::black());
 
     //static int x = 0;
     //gfDrawRectangle(x, 100, x + 50, 130, RGBPIXEL::Blue());
@@ -735,6 +1146,9 @@ void gfDrawScene()
     //int x = gfGetMouseX(),
     //    y = gfGetMouseY();
     //gfDrawRectangle(x - 10, y - 10, x + 10, y + 10, RGBPIXEL::Green());
+
+    //LAB3
+    lab3();
 }
 
 // Вызывается один раз перед выходом из приложения.
